@@ -14,21 +14,10 @@
 #define COUNT_PRESET 6  // Количество пресетов тока в каждом канале    
 uint8_t ELNUMBER = 3;   // Количество подключенных нагрузок по умолчанию
 
-#if (ENABLE_DEBUG_BLUETOOTH == 1)  
-#include "BluetoothSerial.h"
-const char *pin = "1234"; // Change this to more secure PIN.
-String device_name = "Controller debug";
-BluetoothSerial SerialBT;
-#endif
-
 TaskHandle_t Task1;
 TaskHandle_t Task2;
 TaskHandle_t Task3; 
 TaskHandle_t Task4; 
-TaskHandle_t Task5; 
-TaskHandle_t Task6; 
-TaskHandle_t Task7; 
-TaskHandle_t Task8; 
 
 void Task1code(void* pvParameters);
 void Init_Task1();
@@ -38,14 +27,6 @@ void Task3code(void* pvParameters);
 void Init_Task3();
 void Task4code(void* pvParameters);
 void Init_Task4();
-void Task5code(void* pvParameters);
-void Init_Task5();
-void Task6code(void* pvParameters);
-void Init_Task6();
-void Task7code(void* pvParameters);
-void Init_Task7();
-void Task8code(void* pvParameters);
-void Init_Task8();
 
 byte crc8_bytes(byte *buffer, byte size);
 void Set_current_chanal(float curr, int number);
@@ -770,11 +751,6 @@ void setup() {
   INIT_PWM_IO();
   Serial.setTimeout(5);
   Serial.begin(115200);
-  
-  #if (ENABLE_DEBUG_BLUETOOTH == 1)
-  SerialBT.begin(device_name); //Bluetooth device name
-  SerialBT.setPin(pin);
-  #endif
   
   EEPROM.begin(4096);
   EEPROM.get(0, EE_VALUE); //читаем всё из памяти 
