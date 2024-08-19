@@ -25,19 +25,34 @@ String VERSION_SW = "Версия ПО 1.00";   // Текст для отобр�
 #define GP_NO_DOWNLOAD      // убрать поддержку скачивания файлов с сервера
 
 
+//--------Настройка ШИМ-------------------
+#define frequency     1000 // частота ШИМ (в Гц)
+#define resolution    16   // разрешение ШИМа (в битах) 
+#define pwmChannel_1  0    // канал, на который назначим в дальнейшем ШИМ 
+#define pwmChannel_2  1    // канал, на который назначим в дальнейшем ШИМ 
+#define pwmChannel_3  2    // канал, на который назначим в дальнейшем ШИМ 
+#define pwmChannel_4  3    // канал, на который назначим в дальнейшем ШИМ 
+#define pwmChannel_5  4    // канал, на который назначим в дальнейшем ШИМ
+int pwmChannel[] = {pwmChannel_1, pwmChannel_2, pwmChannel_3, pwmChannel_4, pwmChannel_5};
  
 //--------номера IO-------------------
+#define PWM_Pin_1  25   
+#define PWM_Pin_2  27
+#define PWM_Pin_3  32
+#define PWM_Pin_4  14
+#define PWM_Pin_5  16
+
+#define ONE_WIRE_BUS 17
 
 #define BTN_HALL     33 
 #define ENCODER_A    39 
-#define ENCODER_B    36
+#define ENCODER_B    36 
 
-#define POWER_SELECT 17 
-#define OUT_ON 22
-#define OUT_DU 21
-
-#define RXPIN  34  
-#define TXPIN  32
+#define DETECT_ELOAD_1  34   
+#define DETECT_ELOAD_2  35
+#define DETECT_ELOAD_3  26
+#define DETECT_ELOAD_4  13
+#define DETECT_ELOAD_5  19
 
 //--------номера IO-------------------
 
