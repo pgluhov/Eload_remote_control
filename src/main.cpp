@@ -1,9 +1,6 @@
 #include <Arduino.h>
 #include "driver/uart.h"
 #include "Defines.h"
-//#include "CH_1_Base_table_80W.h"
-//#include "CH_2_Base_table_80W.h"
-//#include "CH_3_Base_table_80W.h"
 
 #include "CH_1_Base_table_60W.h"
 #include "CH_2_Base_table_60W.h"
@@ -18,6 +15,9 @@ TaskHandle_t Task1;
 TaskHandle_t Task2;
 TaskHandle_t Task3; 
 TaskHandle_t Task4; 
+TaskHandle_t Task5; 
+TaskHandle_t Task6; 
+TaskHandle_t Task7; 
 
 void Task1code(void* pvParameters);
 void Init_Task1();
@@ -27,6 +27,12 @@ void Task3code(void* pvParameters);
 void Init_Task3();
 void Task4code(void* pvParameters);
 void Init_Task4();
+void Task5code(void* pvParameters);
+void Init_Task5();
+void Task6code(void* pvParameters);
+void Init_Task6();
+void Task7code(void* pvParameters);
+void Init_Task7();
 
 byte crc8_bytes(byte *buffer, byte size);
 void Set_current_chanal(float curr, int number);
@@ -461,7 +467,7 @@ void Init_Task3() {  //создаем задачу
   delay(500);
 }
 
-void Task4code(void* pvParameters) {  // Выключение Отложенная задача 
+void Task4code(void* pvParameters) {  // Выключение отображения окна с шагом настройки
   #if (ENABLE_DEBUG_TASK == 1)
   Serial.print("Task4code running on core ");
   Serial.println(xPortGetCoreID()); 
@@ -488,7 +494,220 @@ void Init_Task4() {  //создаем задачу
   //delay(500);
 }
 
-void IRAM_ATTR serialEvent(){   
+
+
+void Task5code(void* pvParameters) {  // Функция калибровки нагрузок
+  #if (ENABLE_DEBUG_TASK == 1)
+  Serial.print("Task5code running on core ");
+  Serial.println(xPortGetCoreID()); 
+  #endif
+
+  for (;;) {
+   
+   vTaskDelay(100);   
+  }
+}
+
+void Init_Task5() {  //создаем задачу
+  xTaskCreatePinnedToCore(
+    Task5code, /* Функция задачи. */
+    "Task5",   /* Ее имя. */
+    4096,      /* Размер стека функции */
+    NULL,      /* Параметры */
+    2,         /* Приоритет */
+    &Task5,    /* Дескриптор задачи для отслеживания */
+    0);        /* Указываем пин для данного ядра */
+  //delay(500);
+}
+
+void Task6code(void* pvParameters) {  // Работа LCD (терминал)
+  #if (ENABLE_DEBUG_TASK == 1)
+  Serial.print("Task6code running on core ");
+  Serial.println(xPortGetCoreID()); 
+  #endif 
+  int sprite_select = 0;
+  int sprite_offset = 0;
+  int sprite_draw = 0;
+
+  for (;;) {    
+  
+  switch (sprite_select){  
+    case 0: sprite_offset =  0;   sprite_draw =  0;  break;  
+    case 1: sprite_offset = -60;  sprite_draw = 60;  break;
+    case 2: sprite_offset = -120; sprite_draw = 120; break;
+    case 3: sprite_offset = -180; sprite_draw = 180; break;
+    case 4: sprite_offset = 0; sprite_draw = 0; sprite_select = 0; break;
+  }  
+  
+  sprPtr = (uint16_t*)spr.createSprite(DWIDTH, 60);
+  if(sprite_select != 0){spr.setViewport(0, sprite_offset, DWIDTH, DHEIGHT);}
+  spr.setTextDatum(MC_DATUM);  
+  
+  /*------------Сетка-----------------------------*/
+  spr.fillSprite(TFT_BLACK); // Очистка экрана   
+  spr.drawFastHLine(0, 0,   DWIDTH, TFT_SILVER);    
+  spr.drawFastHLine(0, 40,  DWIDTH, TFT_SILVER);  
+  spr.drawFastHLine(0, 79,  DWIDTH, TFT_SILVER);  
+  spr.drawFastHLine(0, 118, DWIDTH, TFT_SILVER);   
+  spr.drawFastHLine(0, 157, DWIDTH, TFT_SILVER);   
+  spr.drawFastHLine(0, 196, DWIDTH, TFT_SILVER);
+  spr.drawFastHLine(0, 235, DWIDTH, TFT_SILVER);   
+  spr.drawFastVLine(0, 0, 235, TFT_SILVER);  
+  spr.drawFastVLine(106, 0, 235, TFT_SILVER);  
+  spr.drawFastVLine(212, 0, 235, TFT_SILVER);
+  spr.drawFastVLine(319, 0, 235, TFT_SILVER);
+
+/*--------------Отображение тока--------------------------*/
+  for (int i = 0; i < COUNT_PRESET; i++) {   
+    spr.setTextColor(eload[0].curr_col[i], TFT_BLACK);
+    spr.drawFloat(eload[0].curr_val_preset[i], eload[0].curr_decimal[i], eload[0].curr_pos_x[i], eload[0].curr_pos_y[i], 4);
+    }
+  for (int i = 0; i < COUNT_PRESET; i++) {   
+    spr.setTextColor(eload[1].curr_col[i], TFT_BLACK);
+    spr.drawFloat(eload[1].curr_val_preset[i], eload[1].curr_decimal[i], eload[1].curr_pos_x[i], eload[1].curr_pos_y[i], 4);
+    }
+  for (int i = 0; i < COUNT_PRESET; i++) {   
+    spr.setTextColor(eload[2].curr_col[i], TFT_BLACK);
+    spr.drawFloat(eload[2].curr_val_preset[i], eload[2].curr_decimal[i], eload[2].curr_pos_x[i], eload[2].curr_pos_y[i], 4);
+    }     
+
+/*--------------Шаг регулировки тока-----------------------*/
+  if ((active_preset==0 || active_preset==1 || active_preset==4 || active_preset==5) && F_show_lcd_change_step==1){
+    spr.fillRect(90, 91, 140, 59, TFT_BLACK);
+    spr.fillRect(93, 93, 134, 54, TFT_WHITE);
+    spr.fillRect(95, 95, 130, 50, TFT_BLACK);
+    spr.setTextColor(TFT_WHITE, TFT_BLACK);
+    spr.drawString(text_change_step, 160, 110, 2);    
+    if(decimal_set_eload==0){spr.drawString(text_step_1000, 160, 130, 2);} 
+    if(decimal_set_eload==1){spr.drawString(text_step_100, 160, 130, 2);}
+    if(decimal_set_eload==2){spr.drawString(text_step_10, 160, 130, 2);} 
+    if(decimal_set_eload==3){spr.drawString(text_step_1, 160, 130, 2);}
+  }
+
+  if ((active_preset==2 || active_preset==3) && F_show_lcd_change_step==1){
+    spr.fillRect(90, 11, 140, 59, TFT_BLACK);
+    spr.fillRect(93, 13, 134, 54, TFT_WHITE);
+    spr.fillRect(95, 15, 130, 50, TFT_BLACK);
+    spr.setTextColor(TFT_WHITE, TFT_BLACK);
+    spr.drawString(text_change_step, 160, 30, 2);    
+    if(decimal_set_eload==0){spr.drawString(text_step_1000, 160, 50, 2);} 
+    if(decimal_set_eload==1){spr.drawString(text_step_100, 160, 50, 2);}
+    if(decimal_set_eload==2){spr.drawString(text_step_10, 160, 50, 2);}
+    if(decimal_set_eload==3){spr.drawString(text_step_1, 160, 50, 2);}  
+  }
+
+  
+  tft.pushImageDMA(0, sprite_draw, 320, 60, sprPtr);
+  spr.deleteSprite();  // Delete the sprite to free up the RAM
+  sprite_select ++;
+  vTaskDelay(20);
+  }
+}
+
+void Init_Task6() {  //создаем задачу
+  xTaskCreatePinnedToCore(
+    Task6code, /* Функция задачи. */
+    "Task6",   /* Ее имя. */
+    4096,      /* Размер стека функции */
+    NULL,      /* Параметры */
+    2,         /* Приоритет */
+    &Task6,    /* Дескриптор задачи для отслеживания */
+    1);        /* Указываем пин для данного ядра */
+  delay(500);
+}
+
+void Task7code(void* pvParameters) {  // Функции энкодера (терминал)
+  #if (ENABLE_DEBUG_TASK == 1)
+  Serial.print("Task2code running on core ");
+  Serial.println(xPortGetCoreID());
+  #endif  
+
+  for (;;) {
+    
+  // =============== ЭНКОДЕР ===============
+
+   if (enc.left() || Enc_step<0)  { // поворот налево
+    Enc_step=0;    
+    eload[active_eload].curr_val_preset[active_preset] = eload[active_eload].curr_val_preset[active_preset] - decimal_val_eload[decimal_set_eload];
+      if(eload[active_eload].curr_val_preset[active_preset] < 0){eload[active_eload].curr_val_preset[active_preset] = 0;}
+      if(eload[active_eload].curr_val_preset[active_preset] >= 10){eload[active_eload].curr_decimal[active_preset] = 2;}
+      if(eload[active_eload].curr_val_preset[active_preset] < 10){eload[active_eload].curr_decimal[active_preset] = 3;}
+      Set_current_chanal(eload[active_eload].curr_val_preset[active_preset], active_eload);
+      F_show_lcd_change_step = 0;
+      F_first_show = 1;
+      }
+   if (enc.right()|| Enc_step>0) { // поворот направо 
+    Enc_step=0;     
+    eload[active_eload].curr_val_preset[active_preset] = eload[active_eload].curr_val_preset[active_preset] + decimal_val_eload[decimal_set_eload];     
+      if(eload[active_eload].curr_val_preset[active_preset] > eload[active_eload].device_max_current){eload[active_eload].curr_val_preset[active_preset] = eload[active_eload].device_max_current;}      
+      if(eload[active_eload].curr_val_preset[active_preset] >= 10){eload[active_eload].curr_decimal[active_preset] = 2;}      
+      if(eload[active_eload].curr_val_preset[active_preset] < 10){eload[active_eload].curr_decimal[active_preset] = 3;} 
+      Set_current_chanal(eload[active_eload].curr_val_preset[active_preset], active_eload);
+      F_show_lcd_change_step = 0;
+      F_first_show = 1;
+      }
+   if (enc.click()|| Enc_click==1){
+    Enc_click=0;
+    if (F_first_show == 0){ // Если первое нажатие на энкодер - просто показать текущий шаг настройки
+      decimal_set_eload++;
+      if(decimal_set_eload == decimal_arr_size){decimal_set_eload = 0;}
+      F_show_lcd_change_step = 1;
+      counter_show_off = 2000;
+      } 
+    if (F_first_show == 1){ // Если второе нажатие на энкодер - изменить шаг настройки
+      F_first_show = 0; 
+      F_show_lcd_change_step = 1;
+      counter_show_off = 2000;      
+      } 
+    }  
+   if (enc.held() || Enc_held==1){
+    Enc_held=0;   
+    if (active_preset == 3){ // Если выбран максимальный ток модуля, то расчить все значения пресетов  
+      float current_100 = eload[active_eload].curr_val_preset[active_preset];
+      eload[active_eload].curr_val_preset[0] = 0;
+      eload[active_eload].curr_val_preset[1] = current_100*0.10;
+      eload[active_eload].curr_val_preset[2] = current_100*0.55;
+      eload[active_eload].curr_val_preset[4] = current_100*1.10;
+      eload[active_eload].curr_val_preset[5] = current_100*1.40;
+      }                                                                                                                                                                        
+    } 
+    
+          
+  #if (ENABLE_DEBUG_ENC == 1)  
+  if (enc.left()) Serial.println("left");     // поворот налево
+  if (enc.right()) Serial.println("right");   // поворот направо
+  if (enc.leftH()) Serial.println("leftH");   // нажатый поворот налево
+  if (enc.rightH()) Serial.println("rightH"); // нажатый поворот направо
+  #endif
+
+  // =============== КНОПКА ===============
+  
+  #if (ENABLE_DEBUG_ENC == 1)
+  if (enc.press()) Serial.println("press");
+  if (enc.click()) Serial.println("click");
+  if (enc.release()) Serial.println("release"); 
+  if (enc.held()) Serial.println("held");      // однократно вернёт true при удержании
+  #endif
+ 
+   enc.resetState();     
+   vTaskDelay(30);    
+  }
+}
+
+void Init_Task7() {  //создаем задачу
+  xTaskCreatePinnedToCore(
+    Task7code, /* Функция задачи. */
+    "Task7",   /* Ее имя. */
+    4096,      /* Размер стека функции */
+    NULL,      /* Параметры */
+    2,         /* Приоритет */
+    &Task7,    /* Дескриптор задачи для отслеживания */
+    0);        /* Указываем пин для данного ядра */
+  delay(500);
+}
+
+
+void IRAM_ATTR serialEvent() {   
   #if (ENABLE_DEBUG_UART == 1)  
   SerialBT.println("Есть данные в прерывании Serial");  
   #endif
@@ -535,8 +754,8 @@ void IRAM_ATTR serialEvent(){
       #if (ENABLE_DEBUG_UART == 1)
       SerialBT.println("CRC ERROR");
       #endif
-     }
-   }  
+    }
+  }  
 }
 
 byte crc8_bytes(byte *buffer, byte size) {
@@ -598,7 +817,6 @@ for (uint8_t i = 0; i < eload[number].device_table_size; i++){
   }
  }
 } 
-
 
 void INIT_PWM_IO(){
   ledcSetup(pwmChannel_1, frequency, resolution); // задаём настройки ШИМ-канала:                                            
@@ -753,13 +971,12 @@ void setup() {
   Serial.begin(115200);
   
   EEPROM.begin(4096);
-  EEPROM.get(0, EE_VALUE); //читаем всё из памяти 
+  EEPROM.get(0, EE_VALUE); //читаем всё из памяти   
 
-  if(BTN_HALL)
   if (EE_VALUE.initKey != INIT_KEY){INIT_DEFAULT_VALUE();} // первый запуск устройства
   ELNUMBER = EE_VALUE.elnumber;
   
-  QueueHandleUartResive = xQueueCreate(QueueElementSizeUart, sizeof(message_uart_resive)); // Создайте очередь, которая будет содержать <Размер элемента очереди> количество элементов, каждый из которых имеет размер `message_t`, и передайте адрес в <QueueHandleKeyboard>.
+  QueueHandleUartResive = xQueueCreate(QueueElementSizeUart, sizeof(message_uart_resive));
   if(QueueHandleUartResive == NULL){  // Проверьте, была ли успешно создана очередь
     Serial.println("QueueHandleUartResive could not be created. Halt.");
     while(1) delay(1000);   // Halt at this point as is not possible to continue
@@ -769,10 +986,20 @@ void setup() {
   INIT_ELOAD();
   INIT_LCD();
   INIT_TIM_ENC();
-  Init_Task3(); // Работа LCD
-  Init_Task2(); // Обработка энкодера  
-  Init_Task1(); // Обработка принятых данных от клавиатуры
-  Init_Task4();
+
+  if(BTN_HALL == 1){ // Нормальный запуск
+    Init_Task3();    // Работа LCD
+    Init_Task2();    // Обработка энкодера  
+    Init_Task1();    // Обработка принятых данных от клавиатуры
+    Init_Task4();    // Выключение отображения окна с шагом настройки
+  }
+
+  if(BTN_HALL == 0){ // Если нажат энкодер при старте запускаем калибровку
+    Init_Task6();    // Работа LCD (терминал)
+    Init_Task7();    // Функции энкодера (терминал)
+    Init_Task5();    // Функция калибровки нагрузок    
+    Init_Task1();    // Обработка принятых данных от клавиатуры
+  }
 }
 
 void loop() {
