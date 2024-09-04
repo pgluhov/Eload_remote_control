@@ -36,6 +36,7 @@ void Init_Task7();
 
 byte crc8_bytes(byte *buffer, byte size);
 void Set_current_chanal(float curr, int number);
+char *utf8rus(char *source);
 
 #pragma pack(push, 1) // используем принудительное выравнивание
 struct Rx_buff{       // Структура приемник от клавиатуры   
@@ -80,6 +81,12 @@ typedef struct{
 TFT_eSPI  tft = TFT_eSPI();  // Экземпляр библиотеки
 TFT_eSprite spr = TFT_eSprite(&tft);  
 uint16_t* sprPtr;            // Указатели на запуск спрайтов в оперативной памяти (тогда это указатели на "изображение")
+#include "FreeSerif10.h"
+#include "FreeSerif16.h"
+#define GFXFF 1
+#define FONT &FreeSerif10pt8b
+#define FONT2 &FreeSerif16pt8b
+
 
 //--------------------------------------------------------------------------------------------
 
@@ -173,16 +180,32 @@ const char* text_step_1000 = "1000 mA";
 const char* text_step_100 = "100 mA";
 const char* text_step_10 = "10 mA";
 const char* text_step_1 = "1 mA";
-int decimal_set_eload = 0;            // шаг изменения тока (0)1,0А - (1)0,1А - (2)0,01А - (3)0,001А
-float decimal_val_eload[] = {1.0, 0.1, 0.01, 0.001}; // массив значений для изменения 
+int decimal_set_eload = 0; // шаг изменения тока (0)1,0А - (1)0,1А - (2)0,01А - (3)0,001А
+float decimal_val_eload[] = {1.0, 0.1, 0.01, 0.001}; // массив значений для изменения тока
 int decimal_arr_size = sizeof(decimal_val_eload) / sizeof (decimal_val_eload[0]);
 bool F_show_lcd_change_step = 0;
 bool F_first_show = 1;
 int counter_show_off = 1;
 
+struct call_eload_t {  // Структура для хранения параметров нагрузи при калибровке 
+  uint16_t  device_table[50][2];    // таблица калибровочная [ток mA] [ PWM ]
+  uint8_t     device_table_size;    // размер массива
+  uint8_t    device_max_current;    // максимальный ток
+  int     device_max_power[4] = {50,60,80,300};    // максимальная мощность на канал  
+  int       arr_call_position = 0;
+  int      port_call_position = 0;
+  int          active_pos_enc = 0;
+  int          pwm_val_enc[4] = {1, 10, 100, 1000}; 
+  int            pwm_arr_size = sizeof(pwm_val_enc) / sizeof (pwm_val_enc[0]);
+  int       step_callibration = 0;
+}; 
+call_eload_t call_eload;  // Создайте структуру и получите указатель на нее
+
+
 int Enc_step  = 0;
 int Enc_click = 0;
 int Enc_held  = 0;
+
 //--------------------------------------------------------------------------------------------
 
 #include <OneWire.h>
@@ -529,6 +552,16 @@ void Task6code(void* pvParameters) {  // Работа LCD (терминал)
   int sprite_offset = 0;
   int sprite_draw = 0;
 
+  char text_1[] = "Установите ток";   
+  char text_2[10]; 
+  char text_3[40]; 
+  char text_4[] = "Выберите мощность нагрузки"; 
+  char text_5[] = "Выберите порт подключения"; 
+  char text_6[40]; 
+  char text_7[] = "Сохранение параметров"; 
+  char text_8[] = "Ожидайте перезагрузки"; 
+  char text_9[] = "#####################"; 
+
   for (;;) {    
   
   switch (sprite_select){  
@@ -545,57 +578,57 @@ void Task6code(void* pvParameters) {  // Работа LCD (терминал)
   
   /*------------Сетка-----------------------------*/
   spr.fillSprite(TFT_BLACK); // Очистка экрана   
-  spr.drawFastHLine(0, 0,   DWIDTH, TFT_SILVER);    
-  spr.drawFastHLine(0, 40,  DWIDTH, TFT_SILVER);  
-  spr.drawFastHLine(0, 79,  DWIDTH, TFT_SILVER);  
-  spr.drawFastHLine(0, 118, DWIDTH, TFT_SILVER);   
-  spr.drawFastHLine(0, 157, DWIDTH, TFT_SILVER);   
-  spr.drawFastHLine(0, 196, DWIDTH, TFT_SILVER);
+  spr.drawFastHLine(0, 0,   DWIDTH, TFT_SILVER); 
   spr.drawFastHLine(0, 235, DWIDTH, TFT_SILVER);   
-  spr.drawFastVLine(0, 0, 235, TFT_SILVER);  
-  spr.drawFastVLine(106, 0, 235, TFT_SILVER);  
-  spr.drawFastVLine(212, 0, 235, TFT_SILVER);
-  spr.drawFastVLine(319, 0, 235, TFT_SILVER);
+  spr.drawFastVLine(0, 0, 235, TFT_SILVER);
+  spr.drawFastVLine(319, 0, 235, TFT_SILVER);  
 
-/*--------------Отображение тока--------------------------*/
-  for (int i = 0; i < COUNT_PRESET; i++) {   
-    spr.setTextColor(eload[0].curr_col[i], TFT_BLACK);
-    spr.drawFloat(eload[0].curr_val_preset[i], eload[0].curr_decimal[i], eload[0].curr_pos_x[i], eload[0].curr_pos_y[i], 4);
-    }
-  for (int i = 0; i < COUNT_PRESET; i++) {   
-    spr.setTextColor(eload[1].curr_col[i], TFT_BLACK);
-    spr.drawFloat(eload[1].curr_val_preset[i], eload[1].curr_decimal[i], eload[1].curr_pos_x[i], eload[1].curr_pos_y[i], 4);
-    }
-  for (int i = 0; i < COUNT_PRESET; i++) {   
-    spr.setTextColor(eload[2].curr_col[i], TFT_BLACK);
-    spr.drawFloat(eload[2].curr_val_preset[i], eload[2].curr_decimal[i], eload[2].curr_pos_x[i], eload[2].curr_pos_y[i], 4);
-    }     
-
-/*--------------Шаг регулировки тока-----------------------*/
-  if ((active_preset==0 || active_preset==1 || active_preset==4 || active_preset==5) && F_show_lcd_change_step==1){
-    spr.fillRect(90, 91, 140, 59, TFT_BLACK);
-    spr.fillRect(93, 93, 134, 54, TFT_WHITE);
-    spr.fillRect(95, 95, 130, 50, TFT_BLACK);
-    spr.setTextColor(TFT_WHITE, TFT_BLACK);
-    spr.drawString(text_change_step, 160, 110, 2);    
-    if(decimal_set_eload==0){spr.drawString(text_step_1000, 160, 130, 2);} 
-    if(decimal_set_eload==1){spr.drawString(text_step_100, 160, 130, 2);}
-    if(decimal_set_eload==2){spr.drawString(text_step_10, 160, 130, 2);} 
-    if(decimal_set_eload==3){spr.drawString(text_step_1, 160, 130, 2);}
+  if(call_eload.step_callibration==0){ 
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_4), 159, 30); 
+    String strCur = String(call_eload.device_max_power[call_eload.active_pos_enc]);
+    strCur += " W";
+    strCur.toCharArray(text_2, 10);  
+    spr.setFreeFont(FONT2);    
+    spr.drawString(utf8rus(text_2), 159, 105);   
   }
 
-  if ((active_preset==2 || active_preset==3) && F_show_lcd_change_step==1){
-    spr.fillRect(90, 11, 140, 59, TFT_BLACK);
-    spr.fillRect(93, 13, 134, 54, TFT_WHITE);
-    spr.fillRect(95, 15, 130, 50, TFT_BLACK);
-    spr.setTextColor(TFT_WHITE, TFT_BLACK);
-    spr.drawString(text_change_step, 160, 30, 2);    
-    if(decimal_set_eload==0){spr.drawString(text_step_1000, 160, 50, 2);} 
-    if(decimal_set_eload==1){spr.drawString(text_step_100, 160, 50, 2);}
-    if(decimal_set_eload==2){spr.drawString(text_step_10, 160, 50, 2);}
-    if(decimal_set_eload==3){spr.drawString(text_step_1, 160, 50, 2);}  
+  if(call_eload.step_callibration==1){ 
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_5), 159, 30);    
+    String strPort = "Порт номер ";
+    strPort += String(call_eload.port_call_position + 1);
+    strPort.toCharArray(text_6, 40);  
+    spr.setFreeFont(FONT2);    
+    spr.drawString(utf8rus(text_6), 159, 105); 
+  }
+  
+  if(call_eload.step_callibration==2){ 
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_1), 159, 30); 
+    String strCur = String(eload[call_eload.port_call_position].device_table[call_eload.arr_call_position][0]);
+    strCur += " mA";
+    strCur.toCharArray(text_2, 10);  
+    spr.setFreeFont(FONT2);    
+    spr.drawString(utf8rus(text_2), 159, 105);    
+    String strEnc = "шаг энкодера ";
+    strEnc += String(call_eload.pwm_val_enc[call_eload.active_pos_enc]);  
+    strEnc += " pwm";
+    strEnc.toCharArray(text_3, 40);
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_3), 159, 200);  
   }
 
+  if(call_eload.step_callibration==3){ 
+    spr.setTextColor(TFT_DARKGREEN);
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_7), 159, 30);     
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_9), 159, 200);
+    spr.setFreeFont(FONT2);     
+    spr.drawString(utf8rus(text_8), 159, 105); 
+  }    
+  
   
   tft.pushImageDMA(0, sprite_draw, 320, 60, sprPtr);
   spr.deleteSprite();  // Delete the sprite to free up the RAM
@@ -660,35 +693,15 @@ void Task7code(void* pvParameters) {  // Функции энкодера (тер
       counter_show_off = 2000;      
       } 
     }  
+
    if (enc.held() || Enc_held==1){
-    Enc_held=0;   
-    if (active_preset == 3){ // Если выбран максимальный ток модуля, то расчить все значения пресетов  
-      float current_100 = eload[active_eload].curr_val_preset[active_preset];
-      eload[active_eload].curr_val_preset[0] = 0;
-      eload[active_eload].curr_val_preset[1] = current_100*0.10;
-      eload[active_eload].curr_val_preset[2] = current_100*0.55;
-      eload[active_eload].curr_val_preset[4] = current_100*1.10;
-      eload[active_eload].curr_val_preset[5] = current_100*1.40;
+    Enc_held=0;  
+    call_eload.step_callibration ++ ;
+    if (call_eload.step_callibration == 4){ // 
+      call_eload.step_callibration = 0;   
       }                                                                                                                                                                        
     } 
-    
-          
-  #if (ENABLE_DEBUG_ENC == 1)  
-  if (enc.left()) Serial.println("left");     // поворот налево
-  if (enc.right()) Serial.println("right");   // поворот направо
-  if (enc.leftH()) Serial.println("leftH");   // нажатый поворот налево
-  if (enc.rightH()) Serial.println("rightH"); // нажатый поворот направо
-  #endif
-
-  // =============== КНОПКА ===============
-  
-  #if (ENABLE_DEBUG_ENC == 1)
-  if (enc.press()) Serial.println("press");
-  if (enc.click()) Serial.println("click");
-  if (enc.release()) Serial.println("release"); 
-  if (enc.held()) Serial.println("held");      // однократно вернёт true при удержании
-  #endif
- 
+     
    enc.resetState();     
    vTaskDelay(30);    
   }
@@ -705,6 +718,7 @@ void Init_Task7() {  //создаем задачу
     0);        /* Указываем пин для данного ядра */
   delay(500);
 }
+
 
 
 void IRAM_ATTR serialEvent() {   
@@ -965,6 +979,38 @@ void INIT_DEFAULT_VALUE(){ // Заполняем переменные в EEPROM 
     EEPROM.commit();              // записываем
 }
 
+#define maxString 100 // ограничиваем строку шириной экрана
+char target[maxString + 1] = "";
+char *utf8rus(char *source)
+{
+int i,j,k;
+unsigned char n;
+char m[2] = { '0', '\0' };
+strcpy(target, ""); k = strlen(source); i = j = 0;
+while (i < k) {
+    n = source[i]; i++;
+
+    if (n >= 127) {
+     switch (n) {
+        case 208: {
+         n = source[i]; i++;
+         if (n == 129) { n = 192; break; } // перекодируем букву Ё
+         break;
+        }
+        case 209: {
+         n = source[i]; i++;
+         if (n == 145) { n = 193; break; } // перекодируем букву ё
+         break;
+        }
+     }
+    }
+
+    m[0] = n; strcat(target, m);
+    j++; if (j >= maxString) break;
+}
+return target;
+}
+
 void setup() {
   INIT_PWM_IO();
   Serial.setTimeout(5);
@@ -987,14 +1033,14 @@ void setup() {
   INIT_LCD();
   INIT_TIM_ENC();
 
-  if(BTN_HALL == 1){ // Нормальный запуск
+  if(digitalRead(BTN_HALL) == 0){ // Нормальный запуск
     Init_Task3();    // Работа LCD
     Init_Task2();    // Обработка энкодера  
     Init_Task1();    // Обработка принятых данных от клавиатуры
     Init_Task4();    // Выключение отображения окна с шагом настройки
   }
 
-  if(BTN_HALL == 0){ // Если нажат энкодер при старте запускаем калибровку
+  if(digitalRead(BTN_HALL) == 1){ // Если нажат энкодер при старте запускаем калибровку
     Init_Task6();    // Работа LCD (терминал)
     Init_Task7();    // Функции энкодера (терминал)
     Init_Task5();    // Функция калибровки нагрузок    
