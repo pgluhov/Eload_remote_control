@@ -1,10 +1,7 @@
 #include <Arduino.h>
 #include "driver/uart.h"
 #include "Defines.h"
-
-#include "CH_1_Base_table_60W.h"
-#include "CH_2_Base_table_60W.h"
-#include "CH_3_Base_table_60W.h"
+#include "Base_table.h"
 
 #define ELNUMBER_MAX 5  // Количество подключенных нагрузок максимально
 #define ELNUMBER_MIN 1  // Количество подключенных нагрузок минимально
@@ -37,6 +34,11 @@ void Init_Task7();
 byte crc8_bytes(byte *buffer, byte size);
 void Set_current_chanal(float curr, int number);
 char *utf8rus(char *source);
+void Set_pwm_chanal(uint32_t pwm, int number);
+void SelectedPower();
+void SelectedPort();
+void SaveDotGraf();
+void SaveAllConfig();
 
 #pragma pack(push, 1) // используем принудительное выравнивание
 struct Rx_buff{       // Структура приемник от клавиатуры   
@@ -101,9 +103,16 @@ struct valueEEprom {  // структура с переменными
   char ssid[20];
   char pass[20];
   char locate[20];
-  uint16_t CH_1_EL_table[46][2];
-  uint16_t CH_2_EL_table[46][2];
-  uint16_t CH_3_EL_table[46][2];
+  
+  int EL_max_current[5];
+  int EL_max_voltage[5];
+  int EL_max_power[5];
+  int EL_dot_count[5];
+  uint16_t EL_table_1[50][2];
+  uint16_t EL_table_2[50][2];
+  uint16_t EL_table_3[50][2];
+  uint16_t EL_table_4[50][2];
+  uint16_t EL_table_5[50][2];
 }; 
 valueEEprom EE_VALUE;
 
@@ -129,47 +138,7 @@ struct eload_t {  // Структура для хранения параметр
   float                     tempC_val;    // значение температуры 
   uint8_t               tempC_decimal;    // количаство знаков после запятой 
   uint16_t                  tempC_col;    // цвет температуры   
-  
-  //uint16_t       textDeg_pos_x;    // x координата центра текста
-  //uint16_t       textDeg_pos_y;    // y координата центра текста
-  //char         textDeg_val[15];    // значение текста 
-  //uint16_t         textDeg_col;    // цвет текста
-
-  //uint16_t   text_device_pos_x;    // x координата центра текста
-  //uint16_t   text_device_pos_y;    // y координата центра текста
-  //char     text_device_pos[15];    // значение текста 
-  //uint16_t       text_id_pos_x;    // x координата центра текста
-  //uint16_t       text_id_pos_y;    // y координата центра текста
-  //char      text_device_id[15];    // значение текста 
-  //uint16_t      rect_dev_pos_x;    // x координата центра текста
-  //uint16_t      rect_dev_pos_y;    // y координата центра текста 
-  //uint16_t      rect_dev_pos_h;    // h высота элемента
-  //uint16_t      rect_dev_pos_w;    // w ширина элемента 
-  //uint16_t        rect_dev_col;    // цвет статуса   
-
-  //uint16_t      textCurr_pos_x;    // x координата центра текста
-  //uint16_t      textCurr_pos_y;    // y координата центра текста
-  //char        textCurr_val[15];    // значение текста 
-  //uint16_t        textCurr_col;    // цвет текста      
-
-  //uint16_t     status_el_pos_x;    // x координата центра текста
-  //uint16_t     status_el_pos_y;    // y координата центра текста 
-  //uint16_t     status_el_pos_h;    // h высота элемента
-  //uint16_t     status_el_pos_w;    // w ширина элемента 
-  //uint16_t       status_el_col;    // цвет статуса  
-
-  //uint16_t  Progress_bar_pos_x;    // x координата центра обводки
-  //uint16_t  Progress_bar_pos_y;    // y координата центра обводки 
-  //uint16_t  Progress_bar_pos_h;    // h высота элемента обводки
-  //uint16_t  Progress_bar_pos_w;    // w ширина элемента обводки  
-  //uint16_t    Progress_bar_col;    // цвет обводки
-  //uint16_t Progress_full_pos_x;    // x координата центра заполнения
-  //uint16_t Progress_full_pos_y;    // y координата центра заполнения 
-  //uint16_t Progress_full_pos_h;    // h высота элемента заполнения
-  //uint16_t Progress_full_pos_w;    // w ширина элемента заполнения  
-  //uint16_t   Progress_full_col;    // цвет заполнения
-
-}; 
+  }; 
 eload_t eload[ELNUMBER_MAX];  // Создайте структуру и получите указатель на нее
 
 int active_preset = 0;   // Активная позиция пресета
@@ -191,13 +160,14 @@ struct call_eload_t {  // Структура для хранения парам�
   uint16_t  device_table[50][2];    // таблица калибровочная [ток mA] [ PWM ]
   uint8_t     device_table_size;    // размер массива
   uint8_t    device_max_current;    // максимальный ток
-  int     device_max_power[4] = {50,60,80,300};    // максимальная мощность на канал  
+  int     device_max_power[4] = {50,60,80,300};    // максимальная мощность на канал    
   int       arr_call_position = 0;
   int      port_call_position = 0;
   int          active_pos_enc = 0;
   int          pwm_val_enc[4] = {1, 10, 100, 1000}; 
   int            pwm_arr_size = sizeof(pwm_val_enc) / sizeof (pwm_val_enc[0]);
   int       step_callibration = 0;
+  uint16_t   pwm_chanal_value = 0;
 }; 
 call_eload_t call_eload;  // Создайте структуру и получите указатель на нее
 
@@ -583,7 +553,7 @@ void Task6code(void* pvParameters) {  // Работа LCD (терминал)
   spr.drawFastVLine(0, 0, 235, TFT_SILVER);
   spr.drawFastVLine(319, 0, 235, TFT_SILVER);  
 
-  if(call_eload.step_callibration==0){ 
+  if(call_eload.step_callibration==1){ 
     spr.setFreeFont(FONT);    
     spr.drawString(utf8rus(text_4), 159, 30); 
     String strCur = String(call_eload.device_max_power[call_eload.active_pos_enc]);
@@ -593,7 +563,7 @@ void Task6code(void* pvParameters) {  // Работа LCD (терминал)
     spr.drawString(utf8rus(text_2), 159, 105);   
   }
 
-  if(call_eload.step_callibration==1){ 
+  if(call_eload.step_callibration==0){ 
     spr.setFreeFont(FONT);    
     spr.drawString(utf8rus(text_5), 159, 30);    
     String strPort = "Порт номер ";
@@ -661,41 +631,68 @@ void Task7code(void* pvParameters) {  // Функции энкодера (тер
 
    if (enc.left() || Enc_step<0)  { // поворот налево
     Enc_step=0;    
-    eload[active_eload].curr_val_preset[active_preset] = eload[active_eload].curr_val_preset[active_preset] - decimal_val_eload[decimal_set_eload];
-      if(eload[active_eload].curr_val_preset[active_preset] < 0){eload[active_eload].curr_val_preset[active_preset] = 0;}
-      if(eload[active_eload].curr_val_preset[active_preset] >= 10){eload[active_eload].curr_decimal[active_preset] = 2;}
-      if(eload[active_eload].curr_val_preset[active_preset] < 10){eload[active_eload].curr_decimal[active_preset] = 3;}
-      Set_current_chanal(eload[active_eload].curr_val_preset[active_preset], active_eload);
-      F_show_lcd_change_step = 0;
-      F_first_show = 1;
+    
+      if(call_eload.step_callibration==1){
+        call_eload.active_pos_enc --;
+        if(call_eload.active_pos_enc < 0){call_eload.active_pos_enc = 0;}
+        }
+
+      if(call_eload.step_callibration==0){
+        call_eload.port_call_position --;
+        if(call_eload.port_call_position < 0){call_eload.port_call_position = 0;}
       }
-   if (enc.right()|| Enc_step>0) { // поворот направо 
+
+      if(call_eload.step_callibration==2){
+        call_eload.pwm_chanal_value = call_eload.pwm_chanal_value - call_eload.pwm_val_enc[call_eload.active_pos_enc];
+        if(call_eload.pwm_chanal_value < 0){call_eload.pwm_chanal_value = 0;}
+        Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);
+        Serial.print("port_call_position ");
+        Serial.println(call_eload.port_call_position);
+        Serial.print("pwm_chanal_value ");
+        Serial.println(call_eload.pwm_chanal_value);
+      }
+     
+      }
+   if (enc.right()|| Enc_step>0) {  // поворот направо 
     Enc_step=0;     
-    eload[active_eload].curr_val_preset[active_preset] = eload[active_eload].curr_val_preset[active_preset] + decimal_val_eload[decimal_set_eload];     
-      if(eload[active_eload].curr_val_preset[active_preset] > eload[active_eload].device_max_current){eload[active_eload].curr_val_preset[active_preset] = eload[active_eload].device_max_current;}      
-      if(eload[active_eload].curr_val_preset[active_preset] >= 10){eload[active_eload].curr_decimal[active_preset] = 2;}      
-      if(eload[active_eload].curr_val_preset[active_preset] < 10){eload[active_eload].curr_decimal[active_preset] = 3;} 
-      Set_current_chanal(eload[active_eload].curr_val_preset[active_preset], active_eload);
-      F_show_lcd_change_step = 0;
-      F_first_show = 1;
+   
+      if(call_eload.step_callibration==1){
+        call_eload.active_pos_enc ++;
+        if(call_eload.active_pos_enc > 3){call_eload.active_pos_enc = 3;}
+        }
+
+      if(call_eload.step_callibration==0){
+        call_eload.port_call_position ++;
+        if(call_eload.port_call_position > 4){call_eload.port_call_position = 4;}
+      }
+
+      if(call_eload.step_callibration==2){  
+        call_eload.pwm_chanal_value = call_eload.pwm_chanal_value + call_eload.pwm_val_enc[call_eload.active_pos_enc];
+        if(call_eload.pwm_chanal_value > 64000){call_eload.pwm_chanal_value = 64000;}
+        Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);
+        Serial.print("port_call_position ");
+        Serial.println(call_eload.port_call_position);
+        Serial.print("pwm_chanal_value ");
+        Serial.println(call_eload.pwm_chanal_value);
+      }
+
+
       }
    if (enc.click()|| Enc_click==1){
     Enc_click=0;
-    if (F_first_show == 0){ // Если первое нажатие на энкодер - просто показать текущий шаг настройки
-      decimal_set_eload++;
-      if(decimal_set_eload == decimal_arr_size){decimal_set_eload = 0;}
-      F_show_lcd_change_step = 1;
-      counter_show_off = 2000;
-      } 
-    if (F_first_show == 1){ // Если второе нажатие на энкодер - изменить шаг настройки
-      F_first_show = 0; 
-      F_show_lcd_change_step = 1;
-      counter_show_off = 2000;      
-      } 
+    if (call_eload.step_callibration == 2){ 
+      call_eload.active_pos_enc++;
+      if(call_eload.active_pos_enc == call_eload.pwm_arr_size){call_eload.active_pos_enc = 0;}      
+      }    
     }  
-
    if (enc.held() || Enc_held==1){
-    Enc_held=0;  
+    Enc_held=0;     
+    switch (call_eload.step_callibration){
+    case 0: /* code */ SelectedPort(); break;    
+    case 1: /* code */ SelectedPower();  break;  
+    case 2: /* code */ SaveDotGraf();   break;  
+    case 3: /* code */ SaveAllConfig(); break; 
+    } 
     call_eload.step_callibration ++ ;
     if (call_eload.step_callibration == 4){ // 
       call_eload.step_callibration = 0;   
@@ -718,6 +715,26 @@ void Init_Task7() {  //создаем задачу
     0);        /* Указываем пин для данного ядра */
   delay(500);
 }
+
+void Set_pwm_chanal(uint32_t pwm, int number){   
+  switch (number){  
+    case 0 : number = 2; break;
+    case 2 : number = 0; break;
+  } 
+
+  if(number > 4){return;} 
+  if(pwm == 0){ledcWrite(pwmChannel[number], 0); return;}
+  ledcWrite(pwmChannel[number], pwm);  
+} 
+
+void SelectedPower(){}
+
+void SelectedPort(){}
+
+void SaveDotGraf(){}
+
+void SaveAllConfig(){}
+
 
 
 
@@ -889,25 +906,39 @@ void INIT_LCD(){
 void INIT_ELOAD(){
 
     memmove (&eload[0].device_id, &ThermometerArr[0], 8);
-    memcpy(*eload[0].device_table, *EE_VALUE.CH_1_EL_table, sizeof(EE_VALUE.CH_1_EL_table));
-    eload[0].device_table_size = sizeof(EE_VALUE.CH_1_EL_table) / sizeof (EE_VALUE.CH_1_EL_table[0]);  
-    eload[0].device_max_current = CH_1_Current_Limit;
-    eload[0].device_max_voltage = CH_1_Voltage_Limit;
-    eload[0].device_max_power = CH_1_Power_Limit;
+    memcpy(*eload[0].device_table, *EE_VALUE.EL_table_1, sizeof(EE_VALUE.EL_table_1));
+    eload[0].device_table_size = EE_VALUE.EL_dot_count[0];
+    eload[0].device_max_current = EE_VALUE.EL_max_current[0];
+    eload[0].device_max_voltage = EE_VALUE.EL_max_voltage[0];
+    eload[0].device_max_power = EE_VALUE.EL_max_power[0];
 
     memmove (&eload[1].device_id, &ThermometerArr[1], 8);
-    memcpy(*eload[1].device_table, *EE_VALUE.CH_2_EL_table, sizeof(EE_VALUE.CH_2_EL_table));
-    eload[1].device_table_size = sizeof(EE_VALUE.CH_2_EL_table) / sizeof (EE_VALUE.CH_2_EL_table[0]); 
-    eload[1].device_max_current = CH_2_Current_Limit;
-    eload[1].device_max_voltage = CH_2_Voltage_Limit;
-    eload[1].device_max_power = CH_2_Power_Limit;
+    memcpy(*eload[1].device_table, *EE_VALUE.EL_table_2, sizeof(EE_VALUE.EL_table_2));
+    eload[1].device_table_size = EE_VALUE.EL_dot_count[1];
+    eload[1].device_max_current = EE_VALUE.EL_max_current[1];
+    eload[1].device_max_voltage = EE_VALUE.EL_max_voltage[1];
+    eload[1].device_max_power = EE_VALUE.EL_max_power[1];
 
     memmove (&eload[2].device_id, &ThermometerArr[2], 8);
-    memcpy(*eload[2].device_table, *EE_VALUE.CH_3_EL_table, sizeof(EE_VALUE.CH_3_EL_table));
-    eload[2].device_table_size = sizeof(EE_VALUE.CH_3_EL_table) / sizeof (EE_VALUE.CH_3_EL_table[0]);
-    eload[2].device_max_current = CH_3_Current_Limit;
-    eload[2].device_max_voltage = CH_3_Voltage_Limit;
-    eload[2].device_max_power = CH_3_Power_Limit;
+    memcpy(*eload[2].device_table, *EE_VALUE.EL_table_3, sizeof(EE_VALUE.EL_table_3));
+    eload[2].device_table_size = EE_VALUE.EL_dot_count[2];
+    eload[2].device_max_current = EE_VALUE.EL_max_current[2];
+    eload[2].device_max_voltage = EE_VALUE.EL_max_voltage[2];
+    eload[2].device_max_power = EE_VALUE.EL_max_power[2];
+
+    memmove (&eload[3].device_id, &ThermometerArr[3], 8);
+    memcpy(*eload[3].device_table, *EE_VALUE.EL_table_4, sizeof(EE_VALUE.EL_table_4));
+    eload[3].device_table_size = EE_VALUE.EL_dot_count[3];
+    eload[3].device_max_current = EE_VALUE.EL_max_current[3];
+    eload[3].device_max_voltage = EE_VALUE.EL_max_voltage[3];
+    eload[3].device_max_power = EE_VALUE.EL_max_power[3];
+
+    memmove (&eload[4].device_id, &ThermometerArr[4], 8);
+    memcpy(*eload[4].device_table, *EE_VALUE.EL_table_5, sizeof(EE_VALUE.EL_table_5));
+    eload[4].device_table_size = EE_VALUE.EL_dot_count[4];
+    eload[4].device_max_current = EE_VALUE.EL_max_current[4];
+    eload[4].device_max_voltage = EE_VALUE.EL_max_voltage[4];
+    eload[4].device_max_power = EE_VALUE.EL_max_power[4];
    
   for (int i = 0; i < ELNUMBER_MAX; i++) {  // Инициализация структур параметров нагрузок 
     eload[i].tempC_val = 0.00;          // значение температуры
@@ -971,9 +1002,18 @@ void INIT_DEFAULT_VALUE(){ // Заполняем переменные в EEPROM 
         } 
       } 
 
-    memcpy(*EE_VALUE.CH_1_EL_table, *CH_1_EL_table, sizeof(CH_1_EL_table));  
-    memcpy(*EE_VALUE.CH_2_EL_table, *CH_2_EL_table, sizeof(CH_2_EL_table));
-    memcpy(*EE_VALUE.CH_3_EL_table, *CH_3_EL_table, sizeof(CH_3_EL_table));
+    memcpy(*EE_VALUE.EL_table_1, *EL_table, sizeof(EL_table));  
+    memcpy(*EE_VALUE.EL_table_2, *EL_table, sizeof(EL_table));
+    memcpy(*EE_VALUE.EL_table_3, *EL_table, sizeof(EL_table));
+    memcpy(*EE_VALUE.EL_table_4, *EL_table, sizeof(EL_table));
+    memcpy(*EE_VALUE.EL_table_5, *EL_table, sizeof(EL_table));
+
+    for(int i=0; i<ELNUMBER_MAX; i++){       
+        EE_VALUE.EL_max_current[i] = EL_max_current[0];
+        EE_VALUE.EL_max_voltage[i] = EL_max_voltage[0];
+        EE_VALUE.EL_max_power[i]   = EL_max_power[0];
+        EE_VALUE.EL_dot_count[i]   = EL_dot_count[0];        
+      }
 
     EEPROM.put(0, EE_VALUE);      // сохраняем
     EEPROM.commit();              // записываем

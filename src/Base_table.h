@@ -1,9 +1,13 @@
+#ifndef BASE_TABLE_H
+#define BASE_TABLE_H
+#include <Arduino.h>
 
-#define CH_1_Power_Limit 60.00    // Максимальная мощность нагрузки
-#define CH_1_Voltage_Limit 85.00  // Максимальное входное напряжение нагрузки
-#define CH_1_Current_Limit 15.00  // Максимальный ток нагрузки
+int EL_max_current[5] = {10, 15, 17, 20 };
+int EL_max_voltage[5] = {80, 80, 85, 250};
+int EL_max_power[5]   = {50, 60, 80, 300};
+int EL_dot_count[5]   = {43, 44, 45, 50 };
 
-uint16_t CH_1_EL_table[][2] {
+uint16_t EL_table[50][2] {
 //ток mA   PWM,    
   {0,      0},  
   {10,    531},
@@ -47,5 +51,12 @@ uint16_t CH_1_EL_table[][2] {
   {12000, 46024},
   {13000, 49840},
   {14000, 53665},
-  {15000, 57518},    
+  {15000, 57518}, 
+  {16000, 57518}, 
+  {17000, 57518}, 
+  {18000, 57518}, 
+  {19000, 57518}, 
+  {20000, 57518},    
 };
+
+#endif //BASE_TABLE_H
