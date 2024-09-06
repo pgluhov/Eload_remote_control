@@ -12,7 +12,7 @@ TaskHandle_t Task1;
 TaskHandle_t Task2;
 TaskHandle_t Task3; 
 TaskHandle_t Task4; 
-TaskHandle_t Task5; 
+TaskHandle_t Task5; // резерв
 TaskHandle_t Task6; 
 TaskHandle_t Task7; 
 
@@ -33,7 +33,6 @@ void Init_Task7();
 
 byte crc8_bytes(byte *buffer, byte size);
 void Set_current_chanal(float curr, int number);
-char *utf8rus(char *source);
 void Set_pwm_chanal(uint32_t pwm, int number);
 void SelectedPower();
 void SelectedPort();
@@ -88,6 +87,9 @@ uint16_t* sprPtr;            // Указатели на запуск спрай�
 #define GFXFF 1
 #define FONT &FreeSerif10pt8b
 #define FONT2 &FreeSerif16pt8b
+#define maxString 100 // ограничиваем строку шириной экрана
+char target[maxString + 1] = "";
+char *utf8rus(char *source);
 
 
 //--------------------------------------------------------------------------------------------
@@ -156,18 +158,14 @@ bool F_show_lcd_change_step = 0;
 bool F_first_show = 1;
 int counter_show_off = 1;
 
-struct call_eload_t {  // Структура для хранения параметров нагрузи при калибровке 
-  uint16_t  device_table[50][2];    // таблица калибровочная [ток mA] [ PWM ]
-  uint8_t     device_table_size;    // размер массива
-  uint8_t    device_max_current;    // максимальный ток
-  int     device_max_power[4] = {50,60,80,300};    // максимальная мощность на канал    
-  int       arr_call_position = 0;
-  int      port_call_position = 0;
-  int          active_pos_enc = 0;
-  int          pwm_val_enc[4] = {1, 10, 100, 1000}; 
-  int            pwm_arr_size = sizeof(pwm_val_enc) / sizeof (pwm_val_enc[0]);
-  int       step_callibration = 0;
-  uint16_t   pwm_chanal_value = 0;
+struct call_eload_t {  // Структура для хранения параметров нагрузи при калибровке  
+  int       arr_call_position = 0;  // номер строки в массиве [ток mA] [ PWM ]
+  int      port_call_position = 0;  // номер порта нагрузки
+  int          active_pos_enc = 0;  // значение энкодера 
+  int          pwm_val_enc[4] = {1, 10, 100, 1000}; //значение шим на шаг энкодера
+  int            pwm_arr_size = sizeof(pwm_val_enc) / sizeof (pwm_val_enc[0]); // размер массива pwm_val_enc[]
+  int       step_callibration = 0;  // шаг этапа калибровки 0-выбор порта, 1-выбор мощности, 2-настройка тока, 3-сохранение
+  uint16_t   pwm_chanal_value = 0;  // значение шим для отправки нагрузке
 }; 
 call_eload_t call_eload;  // Создайте структуру и получите указатель на нее
 
@@ -489,29 +487,6 @@ void Init_Task4() {  //создаем задачу
 
 
 
-void Task5code(void* pvParameters) {  // Функция калибровки нагрузок
-  #if (ENABLE_DEBUG_TASK == 1)
-  Serial.print("Task5code running on core ");
-  Serial.println(xPortGetCoreID()); 
-  #endif
-
-  for (;;) {
-   
-   vTaskDelay(100);   
-  }
-}
-
-void Init_Task5() {  //создаем задачу
-  xTaskCreatePinnedToCore(
-    Task5code, /* Функция задачи. */
-    "Task5",   /* Ее имя. */
-    4096,      /* Размер стека функции */
-    NULL,      /* Параметры */
-    2,         /* Приоритет */
-    &Task5,    /* Дескриптор задачи для отслеживания */
-    0);        /* Указываем пин для данного ядра */
-  //delay(500);
-}
 
 void Task6code(void* pvParameters) {  // Работа LCD (терминал)
   #if (ENABLE_DEBUG_TASK == 1)
@@ -553,30 +528,31 @@ void Task6code(void* pvParameters) {  // Работа LCD (терминал)
   spr.drawFastVLine(0, 0, 235, TFT_SILVER);
   spr.drawFastVLine(319, 0, 235, TFT_SILVER);  
 
-  if(call_eload.step_callibration==1){ 
-    spr.setFreeFont(FONT);    
-    spr.drawString(utf8rus(text_4), 159, 30); 
-    String strCur = String(call_eload.device_max_power[call_eload.active_pos_enc]);
-    strCur += " W";
-    strCur.toCharArray(text_2, 10);  
-    spr.setFreeFont(FONT2);    
-    spr.drawString(utf8rus(text_2), 159, 105);   
-  }
-
-  if(call_eload.step_callibration==0){ 
+ if(call_eload.step_callibration==0){ 
     spr.setFreeFont(FONT);    
     spr.drawString(utf8rus(text_5), 159, 30);    
     String strPort = "Порт номер ";
+    call_eload.port_call_position = call_eload.active_pos_enc;    
     strPort += String(call_eload.port_call_position + 1);
     strPort.toCharArray(text_6, 40);  
     spr.setFreeFont(FONT2);    
     spr.drawString(utf8rus(text_6), 159, 105); 
   }
+
+  if(call_eload.step_callibration==1){ 
+    spr.setFreeFont(FONT);    
+    spr.drawString(utf8rus(text_4), 159, 30); 
+    String strCur = String(EL_max_power[call_eload.active_pos_enc]);
+    strCur += " W";
+    strCur.toCharArray(text_2, 10);  
+    spr.setFreeFont(FONT2);    
+    spr.drawString(utf8rus(text_2), 159, 105);   
+  }
   
   if(call_eload.step_callibration==2){ 
     spr.setFreeFont(FONT);    
     spr.drawString(utf8rus(text_1), 159, 30); 
-    String strCur = String(eload[call_eload.port_call_position].device_table[call_eload.arr_call_position][0]);
+    String strCur = String(EL_table[call_eload.arr_call_position][0]);
     strCur += " mA";
     strCur.toCharArray(text_2, 10);  
     spr.setFreeFont(FONT2);    
@@ -621,7 +597,7 @@ void Init_Task6() {  //создаем задачу
 
 void Task7code(void* pvParameters) {  // Функции энкодера (терминал)
   #if (ENABLE_DEBUG_TASK == 1)
-  Serial.print("Task2code running on core ");
+  Serial.print("Task7code running on core ");
   Serial.println(xPortGetCoreID());
   #endif  
 
@@ -632,73 +608,86 @@ void Task7code(void* pvParameters) {  // Функции энкодера (тер
    if (enc.left() || Enc_step<0)  { // поворот налево
     Enc_step=0;    
     
+      if(call_eload.step_callibration==0){
+        call_eload.active_pos_enc --;
+        if(call_eload.active_pos_enc < 0){call_eload.active_pos_enc = 0;}       
+      }
+
       if(call_eload.step_callibration==1){
         call_eload.active_pos_enc --;
         if(call_eload.active_pos_enc < 0){call_eload.active_pos_enc = 0;}
         }
 
-      if(call_eload.step_callibration==0){
-        call_eload.port_call_position --;
-        if(call_eload.port_call_position < 0){call_eload.port_call_position = 0;}
-      }
-
       if(call_eload.step_callibration==2){
         call_eload.pwm_chanal_value = call_eload.pwm_chanal_value - call_eload.pwm_val_enc[call_eload.active_pos_enc];
-        if(call_eload.pwm_chanal_value < 0){call_eload.pwm_chanal_value = 0;}
-        Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);
-        Serial.print("port_call_position ");
-        Serial.println(call_eload.port_call_position);
-        Serial.print("pwm_chanal_value ");
-        Serial.println(call_eload.pwm_chanal_value);
-      }
-     
+        if(call_eload.pwm_chanal_value > 64000){call_eload.pwm_chanal_value = 0;}
+        Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);       
+       }     
       }
    if (enc.right()|| Enc_step>0) {  // поворот направо 
-    Enc_step=0;     
-   
+    Enc_step=0;   
+
+      if(call_eload.step_callibration==0){
+        call_eload.active_pos_enc ++;
+        if(call_eload.active_pos_enc > 4){call_eload.active_pos_enc = 4;}        
+      }
+
       if(call_eload.step_callibration==1){
         call_eload.active_pos_enc ++;
         if(call_eload.active_pos_enc > 3){call_eload.active_pos_enc = 3;}
         }
 
-      if(call_eload.step_callibration==0){
-        call_eload.port_call_position ++;
-        if(call_eload.port_call_position > 4){call_eload.port_call_position = 4;}
-      }
-
       if(call_eload.step_callibration==2){  
         call_eload.pwm_chanal_value = call_eload.pwm_chanal_value + call_eload.pwm_val_enc[call_eload.active_pos_enc];
         if(call_eload.pwm_chanal_value > 64000){call_eload.pwm_chanal_value = 64000;}
-        Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);
-        Serial.print("port_call_position ");
-        Serial.println(call_eload.port_call_position);
-        Serial.print("pwm_chanal_value ");
-        Serial.println(call_eload.pwm_chanal_value);
+        Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);  
+        }
       }
-
-
-      }
-   if (enc.click()|| Enc_click==1){
+   if (enc.click()|| Enc_click==1){ // click по энкодеру
     Enc_click=0;
     if (call_eload.step_callibration == 2){ 
       call_eload.active_pos_enc++;
       if(call_eload.active_pos_enc == call_eload.pwm_arr_size){call_eload.active_pos_enc = 0;}      
       }    
     }  
-   if (enc.held() || Enc_held==1){
+   if (enc.held() || Enc_held==1){  // долгое нажатие
     Enc_held=0;     
     switch (call_eload.step_callibration){
-    case 0: /* code */ SelectedPort(); break;    
-    case 1: /* code */ SelectedPower();  break;  
-    case 2: /* code */ SaveDotGraf();   break;  
-    case 3: /* code */ SaveAllConfig(); break; 
+      case 0: SelectedPort();  call_eload.step_callibration++; call_eload.active_pos_enc=0; break;    
+      case 1: SelectedPower(); call_eload.step_callibration++; call_eload.active_pos_enc=0; break;       
+      case 2: call_eload.step_callibration++; SaveAllConfig(); break; 
+      }                                                                                                                                                                          
     } 
-    call_eload.step_callibration ++ ;
-    if (call_eload.step_callibration == 4){ // 
-      call_eload.step_callibration = 0;   
-      }                                                                                                                                                                        
+   if (enc.leftH()) { // нажатый поворот налево    
+    if(call_eload.port_call_position == 0){EE_VALUE.EL_table_1[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 1){EE_VALUE.EL_table_2[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 2){EE_VALUE.EL_table_3[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 3){EE_VALUE.EL_table_4[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 4){EE_VALUE.EL_table_5[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    call_eload.arr_call_position --;    
+    if(call_eload.arr_call_position < 0){call_eload.arr_call_position=0;}
+    if(call_eload.port_call_position == 0){call_eload.pwm_chanal_value = EE_VALUE.EL_table_1[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 1){call_eload.pwm_chanal_value = EE_VALUE.EL_table_2[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 2){call_eload.pwm_chanal_value = EE_VALUE.EL_table_3[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 3){call_eload.pwm_chanal_value = EE_VALUE.EL_table_4[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 4){call_eload.pwm_chanal_value = EE_VALUE.EL_table_5[call_eload.arr_call_position][1];}
+    Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);
+   }  
+   if (enc.rightH()){ // нажатый поворот направо  
+    if(call_eload.port_call_position == 0){EE_VALUE.EL_table_1[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 1){EE_VALUE.EL_table_2[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 2){EE_VALUE.EL_table_3[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 3){EE_VALUE.EL_table_4[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    if(call_eload.port_call_position == 4){EE_VALUE.EL_table_5[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+    call_eload.arr_call_position ++;
+    if(call_eload.arr_call_position > EE_VALUE.EL_dot_count[call_eload.port_call_position]){call_eload.arr_call_position = EE_VALUE.EL_dot_count[call_eload.port_call_position];}    
+    if(call_eload.port_call_position == 0){call_eload.pwm_chanal_value = EE_VALUE.EL_table_1[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 1){call_eload.pwm_chanal_value = EE_VALUE.EL_table_2[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 2){call_eload.pwm_chanal_value = EE_VALUE.EL_table_3[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 3){call_eload.pwm_chanal_value = EE_VALUE.EL_table_4[call_eload.arr_call_position][1];}
+    if(call_eload.port_call_position == 4){call_eload.pwm_chanal_value = EE_VALUE.EL_table_5[call_eload.arr_call_position][1];}
+    Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);    
     } 
-     
    enc.resetState();     
    vTaskDelay(30);    
   }
@@ -721,33 +710,62 @@ void Set_pwm_chanal(uint32_t pwm, int number){
     case 0 : number = 2; break;
     case 2 : number = 0; break;
   } 
-
   if(number > 4){return;} 
   if(pwm == 0){ledcWrite(pwmChannel[number], 0); return;}
   ledcWrite(pwmChannel[number], pwm);  
 } 
 
-void SelectedPower(){}
-
-void SelectedPort(){}
-
-void SaveDotGraf(){}
-
-void SaveAllConfig(){}
-
-
-
-
-void IRAM_ATTR serialEvent() {   
-  #if (ENABLE_DEBUG_UART == 1)  
-  SerialBT.println("Есть данные в прерывании Serial");  
+void SelectedPort(){
+  #if (DEBUG_CALLIBROVKA == 1) 
+  Serial.println();
+  Serial.print("Выбран порт ");
+  Serial.println(call_eload.port_call_position + 1);
+  Serial.println();
   #endif
+}
+
+void SelectedPower(){  
+  EE_VALUE.EL_max_current[call_eload.active_pos_enc] = EL_max_current[call_eload.active_pos_enc];
+  EE_VALUE.EL_max_voltage[call_eload.active_pos_enc] = EL_max_voltage[call_eload.active_pos_enc];
+  EE_VALUE.EL_max_power[call_eload.active_pos_enc] = EL_max_power[call_eload.active_pos_enc];
+  EE_VALUE.EL_dot_count[call_eload.active_pos_enc] = EL_dot_count[call_eload.active_pos_enc]; 
+  #if (DEBUG_CALLIBROVKA == 1)  
+  Serial.print("Выбран порт ");
+  Serial.println(call_eload.port_call_position + 1); 
+  Serial.print("Выбран ток ");
+  Serial.println(EE_VALUE.EL_max_current[call_eload.active_pos_enc]);
+  Serial.print("Выбрано напряжение ");
+  Serial.println(EE_VALUE.EL_max_voltage[call_eload.active_pos_enc]);
+  Serial.print("Выбрана мощность ");
+  Serial.println(EE_VALUE.EL_max_power[call_eload.active_pos_enc]);
+  Serial.print("Выбрано точек графика ");
+  Serial.println(EE_VALUE.EL_dot_count[call_eload.active_pos_enc]);
+  Serial.println();
+  #endif
+  
+}
+
+void SaveAllConfig(){
+  if(call_eload.port_call_position == 0){EE_VALUE.EL_table_1[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+  if(call_eload.port_call_position == 1){EE_VALUE.EL_table_2[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+  if(call_eload.port_call_position == 2){EE_VALUE.EL_table_3[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+  if(call_eload.port_call_position == 3){EE_VALUE.EL_table_4[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+  if(call_eload.port_call_position == 4){EE_VALUE.EL_table_5[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
+  #if (DEBUG_CALLIBROVKA == 1) 
+  Serial.print("Сохраняем ВСЁ");  
+  #endif
+  EEPROM.put(0, EE_VALUE);      // сохраняем
+  EEPROM.commit();              // записываем
+  delay(5000);
+  ESP.restart();
+}
+
+void IRAM_ATTR serialEvent(){   
+
   if (Serial.readBytes((byte*)&RxBuff, sizeof(RxBuff))) {
   byte crc = crc8_bytes((byte*)&RxBuff, sizeof(RxBuff));
   if (crc == 0) {
-    #if (ENABLE_DEBUG_UART == 1)
-    SerialBT.println("CRC PASSED");
-    #endif       
+  
       message_uart_resive message;   
          
       message.activeRow = RxBuff.Row;        // Номер строки
@@ -760,32 +778,11 @@ void IRAM_ATTR serialEvent() {
     
       if(QueueHandleUartResive != NULL && uxQueueSpacesAvailable(QueueHandleUartResive) > 0){ // проверьте, существует ли очередь И есть ли в ней свободное место
         int ret = xQueueSend(QueueHandleUartResive, (void*) &message, 0);
-        if(ret == pdTRUE){
-          #if (ENABLE_DEBUG_UART == 1)
-          SerialBT.println("serialEvent Отправлены данные в очередь "); 
-          SerialBT.print("message.activeRow ");          
-          SerialBT.println(message.activeRow);
-          SerialBT.print("message.activeColumn "); 
-          SerialBT.println(message.activeColumn);
-          SerialBT.print("message.statusColumn "); 
-          SerialBT.println(message.statusColumn); 
-          SerialBT.print("message.statPress ");
-          SerialBT.println(message.statPress);
-          SerialBT.print("message.enc_step ");
-          SerialBT.println(message.enc_step); 
-          SerialBT.print("message.enc_click "); 
-          SerialBT.println(message.enc_click);
-          SerialBT.print("message.enc_held ");
-          SerialBT.println(message.enc_held);  
-          #endif    
+        if(ret == pdTRUE){      
           }        
         }     
       } 
-   else {
-      #if (ENABLE_DEBUG_UART == 1)
-      SerialBT.println("CRC ERROR");
-      #endif
-    }
+   else {}
   }  
 }
 
@@ -906,7 +903,7 @@ void INIT_LCD(){
 void INIT_ELOAD(){
 
     memmove (&eload[0].device_id, &ThermometerArr[0], 8);
-    memcpy(*eload[0].device_table, *EE_VALUE.EL_table_1, sizeof(EE_VALUE.EL_table_1));
+    memcpy(*eload[0].device_table, *EE_VALUE.EL_table_3, sizeof(EE_VALUE.EL_table_3));
     eload[0].device_table_size = EE_VALUE.EL_dot_count[0];
     eload[0].device_max_current = EE_VALUE.EL_max_current[0];
     eload[0].device_max_voltage = EE_VALUE.EL_max_voltage[0];
@@ -920,7 +917,7 @@ void INIT_ELOAD(){
     eload[1].device_max_power = EE_VALUE.EL_max_power[1];
 
     memmove (&eload[2].device_id, &ThermometerArr[2], 8);
-    memcpy(*eload[2].device_table, *EE_VALUE.EL_table_3, sizeof(EE_VALUE.EL_table_3));
+    memcpy(*eload[2].device_table, *EE_VALUE.EL_table_1, sizeof(EE_VALUE.EL_table_1));
     eload[2].device_table_size = EE_VALUE.EL_dot_count[2];
     eload[2].device_max_current = EE_VALUE.EL_max_current[2];
     eload[2].device_max_voltage = EE_VALUE.EL_max_voltage[2];
@@ -1017,10 +1014,10 @@ void INIT_DEFAULT_VALUE(){ // Заполняем переменные в EEPROM 
 
     EEPROM.put(0, EE_VALUE);      // сохраняем
     EEPROM.commit();              // записываем
+    delay(5000);
+    
 }
 
-#define maxString 100 // ограничиваем строку шириной экрана
-char target[maxString + 1] = "";
 char *utf8rus(char *source)
 {
 int i,j,k;
@@ -1073,17 +1070,16 @@ void setup() {
   INIT_LCD();
   INIT_TIM_ENC();
 
-  if(digitalRead(BTN_HALL) == 0){ // Нормальный запуск
+  if(digitalRead(BTN_HALL) == 1){ // Нормальный запуск
     Init_Task3();    // Работа LCD
     Init_Task2();    // Обработка энкодера  
     Init_Task1();    // Обработка принятых данных от клавиатуры
     Init_Task4();    // Выключение отображения окна с шагом настройки
   }
 
-  if(digitalRead(BTN_HALL) == 1){ // Если нажат энкодер при старте запускаем калибровку
+  if(digitalRead(BTN_HALL) == 0){ // Если нажат энкодер при старте запускаем калибровку
     Init_Task6();    // Работа LCD (терминал)
-    Init_Task7();    // Функции энкодера (терминал)
-    Init_Task5();    // Функция калибровки нагрузок    
+    Init_Task7();    // Функции энкодера (терминал)     
     Init_Task1();    // Обработка принятых данных от клавиатуры
   }
 }
