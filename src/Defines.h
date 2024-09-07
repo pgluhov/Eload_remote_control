@@ -5,8 +5,8 @@
 
 // ========== ДЕФАЙНЫ НАСТРОЕК ==========
 String DEVICE_NAME = "Eload remote LCD control"; // Имя девайса
-String CURRENT_VERSION_SW = "1.00";     // Текущая версиия прошивки 
-String VERSION_SW = "Версия ПО 1.00";   // Текст для отображения
+String CURRENT_VERSION_SW = "1.50";     // Текущая версиия прошивки 
+String VERSION_SW = "Версия ПО 1.50";   // Текст для отображения
 
 
 #define ENABLE_DEBUG_UART      0  // Если 1 то отладка обмена по uart включена в SerialBT

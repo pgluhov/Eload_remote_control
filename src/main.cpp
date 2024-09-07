@@ -44,8 +44,9 @@ struct Rx_buff{       // Структура приемник от клавиат
   int Row;
   int Column;
   int RawBits;
-  bool statPress;    
+  bool statPress;   
   int enc_step=0;
+  int enc_stepH=0;
   int enc_click=0;
   int enc_held=0;
   byte crc;
@@ -68,8 +69,9 @@ typedef struct{
   int activeRow;     // Номер строки
   int activeColumn;  // Номер столбца
   int statusColumn;  // Байт с битами всего столбца
-  bool statPress;    // Статус нажата или отпущена кнопка   
+  bool statPress;    // Статус нажата или отпущена кнопка
   int enc_step=0;
+  int enc_stepH=0;
   int enc_click=0;
   int enc_held=0;
 } message_uart_resive;
@@ -169,8 +171,8 @@ struct call_eload_t {  // Структура для хранения парам�
 }; 
 call_eload_t call_eload;  // Создайте структуру и получите указатель на нее
 
-
 int Enc_step  = 0;
+int Enc_stepH = 0;
 int Enc_click = 0;
 int Enc_held  = 0;
 
@@ -242,8 +244,9 @@ void Task1code(void* pvParameters) {  // Обработка принятых д�
         #endif 
 
         Enc_step  = message.enc_step;
+        Enc_stepH = message.enc_stepH;
         Enc_click = message.enc_click;
-        Enc_held  = message.enc_held;
+        Enc_held  = message.enc_held; 
         //active_eload = message.activeColumn; 
         //active_preset = message.activeRow; 
         
@@ -485,9 +488,6 @@ void Init_Task4() {  //создаем задачу
   //delay(500);
 }
 
-
-
-
 void Task6code(void* pvParameters) {  // Работа LCD (терминал)
   #if (ENABLE_DEBUG_TASK == 1)
   Serial.print("Task6code running on core ");
@@ -658,7 +658,8 @@ void Task7code(void* pvParameters) {  // Функции энкодера (тер
       case 2: call_eload.step_callibration++; SaveAllConfig(); break; 
       }                                                                                                                                                                          
     } 
-   if (enc.leftH()) { // нажатый поворот налево    
+   if (enc.leftH()|| Enc_stepH<0) { // нажатый поворот налево    
+   Enc_stepH=0;
     if(call_eload.port_call_position == 0){EE_VALUE.EL_table_1[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
     if(call_eload.port_call_position == 1){EE_VALUE.EL_table_2[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
     if(call_eload.port_call_position == 2){EE_VALUE.EL_table_3[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
@@ -673,7 +674,8 @@ void Task7code(void* pvParameters) {  // Функции энкодера (тер
     if(call_eload.port_call_position == 4){call_eload.pwm_chanal_value = EE_VALUE.EL_table_5[call_eload.arr_call_position][1];}
     Set_pwm_chanal(call_eload.pwm_chanal_value, call_eload.port_call_position);
    }  
-   if (enc.rightH()){ // нажатый поворот направо  
+   if (enc.rightH()|| Enc_stepH>0){ // нажатый поворот направо  
+   Enc_stepH=0;
     if(call_eload.port_call_position == 0){EE_VALUE.EL_table_1[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
     if(call_eload.port_call_position == 1){EE_VALUE.EL_table_2[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
     if(call_eload.port_call_position == 2){EE_VALUE.EL_table_3[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
@@ -728,24 +730,11 @@ void SelectedPower(){
   EE_VALUE.EL_max_current[call_eload.active_pos_enc] = EL_max_current[call_eload.active_pos_enc];
   EE_VALUE.EL_max_voltage[call_eload.active_pos_enc] = EL_max_voltage[call_eload.active_pos_enc];
   EE_VALUE.EL_max_power[call_eload.active_pos_enc] = EL_max_power[call_eload.active_pos_enc];
-  EE_VALUE.EL_dot_count[call_eload.active_pos_enc] = EL_dot_count[call_eload.active_pos_enc]; 
-  #if (DEBUG_CALLIBROVKA == 1)  
-  Serial.print("Выбран порт ");
-  Serial.println(call_eload.port_call_position + 1); 
-  Serial.print("Выбран ток ");
-  Serial.println(EE_VALUE.EL_max_current[call_eload.active_pos_enc]);
-  Serial.print("Выбрано напряжение ");
-  Serial.println(EE_VALUE.EL_max_voltage[call_eload.active_pos_enc]);
-  Serial.print("Выбрана мощность ");
-  Serial.println(EE_VALUE.EL_max_power[call_eload.active_pos_enc]);
-  Serial.print("Выбрано точек графика ");
-  Serial.println(EE_VALUE.EL_dot_count[call_eload.active_pos_enc]);
-  Serial.println();
-  #endif
-  
+  EE_VALUE.EL_dot_count[call_eload.active_pos_enc] = EL_dot_count[call_eload.active_pos_enc];   
 }
 
-void SaveAllConfig(){
+void SaveAllConfig(){  
+  Set_pwm_chanal(0, call_eload.port_call_position); 
   if(call_eload.port_call_position == 0){EE_VALUE.EL_table_1[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
   if(call_eload.port_call_position == 1){EE_VALUE.EL_table_2[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
   if(call_eload.port_call_position == 2){EE_VALUE.EL_table_3[call_eload.arr_call_position][1] = call_eload.pwm_chanal_value;}
@@ -766,15 +755,15 @@ void IRAM_ATTR serialEvent(){
   byte crc = crc8_bytes((byte*)&RxBuff, sizeof(RxBuff));
   if (crc == 0) {
   
-      message_uart_resive message;   
-         
+      message_uart_resive message;          
       message.activeRow = RxBuff.Row;        // Номер строки
       message.activeColumn = RxBuff.Column;  // Номер столбца
       message.statusColumn = RxBuff.RawBits; // Байт с битами всего столбца
-      message.statPress = RxBuff.statPress;  // Статус нажата или отпущена кнопка      
-      message.enc_step = RxBuff.enc_step;
-      message.enc_click = RxBuff.enc_click;
-      message.enc_held = RxBuff.enc_held;
+      message.statPress = RxBuff.statPress;  // Статус нажата или отпущена кнопка
+      message.enc_step = RxBuff.enc_step; 
+      message.enc_stepH = RxBuff.enc_stepH;  
+      message.enc_click = RxBuff.enc_click; 
+      message.enc_held = RxBuff.enc_held; 
     
       if(QueueHandleUartResive != NULL && uxQueueSpacesAvailable(QueueHandleUartResive) > 0){ // проверьте, существует ли очередь И есть ли в ней свободное место
         int ret = xQueueSend(QueueHandleUartResive, (void*) &message, 0);
@@ -1018,7 +1007,7 @@ void INIT_DEFAULT_VALUE(){ // Заполняем переменные в EEPROM 
     
 }
 
-char *utf8rus(char *source)
+char *utf8rus(char *source) // функция для поддержки русского шрифта
 {
 int i,j,k;
 unsigned char n;
