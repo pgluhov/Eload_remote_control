@@ -15,6 +15,7 @@ TaskHandle_t Task4;
 TaskHandle_t Task5; // резерв
 TaskHandle_t Task6; 
 TaskHandle_t Task7; 
+TaskHandle_t Task8; 
 
 void Task1code(void* pvParameters);
 void Init_Task1();
@@ -30,6 +31,8 @@ void Task6code(void* pvParameters);
 void Init_Task6();
 void Task7code(void* pvParameters);
 void Init_Task7();
+void Task8code(void* pvParameters);
+void Init_Task8();
 
 byte crc8_bytes(byte *buffer, byte size);
 void Set_current_chanal(float curr, int number);
@@ -323,11 +326,31 @@ void Task2code(void* pvParameters) {  // Функции энкодера
     Enc_held=0;   
     if (active_preset == 3){ // Если выбран максимальный ток модуля, то расчить все значения пресетов  
       float current_100 = eload[active_eload].curr_val_preset[active_preset];
-      eload[active_eload].curr_val_preset[0] = 0;
-      eload[active_eload].curr_val_preset[1] = current_100*0.10;
+      eload[active_eload].curr_val_preset[0] = 0;   
+      eload[active_eload].curr_decimal[0] = 3;   
+
+      eload[active_eload].curr_val_preset[1] = current_100*0.10; 
+      if (eload[active_eload].curr_val_preset[1] <  10 ){eload[active_eload].curr_decimal[1] = 3;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[1] >= 10 ){eload[active_eload].curr_decimal[1] = 2;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[1] >= 100){eload[active_eload].curr_decimal[1] = 1;} // количаство знаков после запятой 
+
       eload[active_eload].curr_val_preset[2] = current_100*0.55;
+      if (eload[active_eload].curr_val_preset[2] <  10 ){eload[active_eload].curr_decimal[2] = 3;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[2] >= 10 ){eload[active_eload].curr_decimal[2] = 2;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[2] >= 100){eload[active_eload].curr_decimal[2] = 1;} // количаство знаков после запятой 
+
       eload[active_eload].curr_val_preset[4] = current_100*1.10;
+      if (eload[active_eload].curr_val_preset[4] > eload[active_eload].device_max_current){eload[active_eload].curr_val_preset[4] = eload[active_eload].device_max_current;}
+      if (eload[active_eload].curr_val_preset[4] <  10 ){eload[active_eload].curr_decimal[4] = 3;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[4] >= 10 ){eload[active_eload].curr_decimal[4] = 2;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[4] >= 100){eload[active_eload].curr_decimal[4] = 1;} // количаство знаков после запятой 
+
       eload[active_eload].curr_val_preset[5] = current_100*1.40;
+      if (eload[active_eload].curr_val_preset[5] > eload[active_eload].device_max_current){eload[active_eload].curr_val_preset[5] = eload[active_eload].device_max_current;}      
+      if (eload[active_eload].curr_val_preset[5] <  10 ){eload[active_eload].curr_decimal[5] = 3;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[5] >= 10 ){eload[active_eload].curr_decimal[5] = 2;} // количаство знаков после запятой 
+      if (eload[active_eload].curr_val_preset[5] >= 100){eload[active_eload].curr_decimal[5] = 1;} // количаство знаков после запятой 
+
       }                                                                                                                                                                        
     } 
     
@@ -707,6 +730,54 @@ void Init_Task7() {  //создаем задачу
   delay(500);
 }
 
+void Task8code(void* pvParameters) {  // Сохранение в EEPROM 
+  #if (ENABLE_DEBUG_TASK == 1)
+  Serial.print("Task8code running on core ");
+  Serial.println(xPortGetCoreID()); 
+  #endif 
+
+  int update_eeprom = 0; 
+
+  for (;;) {   
+
+
+    //for (int i = 0; i < PSNUMBER; i++) { 
+    //  for(int j=0; j<COUNT_PRESET; j++){ 
+    //    if (EE_VALUE.volt_preset[i][j]  != power_supply[i].volt_preset[j])  {EE_VALUE.volt_preset[i][j]  = power_supply[i].volt_preset[j];  update_eeprom = 1;}     
+    //    if (EE_VALUE.curr_protect[i][j] != power_supply[i].curr_protect[j]) {EE_VALUE.curr_protect[i][j] = power_supply[i].curr_protect[j]; update_eeprom = 1;} 
+    //   }
+    // }
+
+    for (int i = 0; i < ELNUMBER_MAX; i++) {  // Инициализация структур параметров нагрузок    
+        
+    for(int val=0; val<COUNT_PRESET; val++){
+      if (EE_VALUE.curr[i][val] != eload[i].curr_val_preset[val]){ // значения токов
+        EE_VALUE.curr[i][val] = eload[i].curr_val_preset[val]; 
+        update_eeprom = 1;} 
+      }
+    }
+
+   if (update_eeprom == 1){    
+    update_eeprom = 0; 
+    EEPROM.put(0, EE_VALUE); // сохраняем
+    EEPROM.commit();         // записываем
+   }
+   vTaskDelay(300000/portTICK_PERIOD_MS); // 5 минут
+  }
+}
+
+void Init_Task8() {  //создаем задачу
+  xTaskCreatePinnedToCore(
+    Task8code, /* Функция задачи. */
+    "Task8",   /* Ее имя. */
+    4096,      /* Размер стека функции */
+    NULL,      /* Параметры */
+    2,         /* Приоритет */
+    &Task8,    /* Дескриптор задачи для отслеживания */
+    0);        /* Указываем пин для данного ядра */
+  delay(50);
+}
+
 void Set_pwm_chanal(uint32_t pwm, int number){   
   switch (number){  
     case 0 : number = 2; break;
@@ -789,45 +860,45 @@ byte crc8_bytes(byte *buffer, byte size) {
 
 void Set_current_chanal(float curr, int number){ 
   
-if(number > 4){return;} 
-if(curr == 0){ledcWrite(pwmChannel[number], 0); return;}
-uint16_t search;
-uint16_t min;
-uint16_t max; 
-uint16_t val_max;
-uint16_t val_min;
-float curr_f = round(curr*1000.00); 
-uint16_t current = (unsigned int)curr_f;
-#if (ENABLE_DEBUG_CONV == 1)
-Serial.println();
-Serial.print("curr_f: ");
-Serial.println(curr_f);
-Serial.print("word(curr_f: ");
-Serial.println(current);
-Serial.print("eload[number].device_table_size: ");
-Serial.println(eload[number].device_table_size);
-#endif
-
-for (uint8_t i = 0; i < eload[number].device_table_size; i++){ 
- search = eload[number].device_table[i][0]; 
- if(current <= search){
-  max = search;
-  val_max = eload[number].device_table[i][1];
-  i=i-1; 
-  min = eload[number].device_table[i][0];
-  val_min = eload[number].device_table[i][1];
-  float t = float(max-min)/float(current-min);  
-  float PWM = ((val_max-val_min)/t)+val_min;
-  word pwm_load = word(PWM);
+  if(number > 4){return;} 
+  if(curr == 0){ledcWrite(pwmChannel[number], 0); return;}
+  uint16_t search;
+  uint16_t min;
+  uint16_t max; 
+  uint16_t val_max;
+  uint16_t val_min;
+  float curr_f = round(curr*1000.00); 
+  uint16_t current = (unsigned int)curr_f;
   #if (ENABLE_DEBUG_CONV == 1)
-  Serial.print("search ");
-  Serial.println(search);
-  Serial.print("t " );
-  Serial.println(t);
-  Serial.print("float PWM ");
-  Serial.println(PWM);   
-  Serial.print("pwm_load "); 
-  Serial.println(pwm_load);
+    Serial.println();
+    Serial.print("curr_f: ");
+    Serial.println(curr_f);
+    Serial.print("word(curr_f: ");
+    Serial.println(current);
+    Serial.print("eload[number].device_table_size: ");
+    Serial.println(eload[number].device_table_size);
+  #endif
+
+  for (uint8_t i = 0; i < eload[number].device_table_size; i++){ 
+    search = eload[number].device_table[i][0]; 
+  if(current <= search){
+    max = search;
+    val_max = eload[number].device_table[i][1];
+    i=i-1; 
+    min = eload[number].device_table[i][0];
+    val_min = eload[number].device_table[i][1];
+    float t = float(max-min)/float(current-min);  
+    float PWM = ((val_max-val_min)/t)+val_min;
+    word pwm_load = word(PWM);
+  #if (ENABLE_DEBUG_CONV == 1)
+    Serial.print("search ");
+    Serial.println(search);
+    Serial.print("t " );
+    Serial.println(t);
+    Serial.print("float PWM ");
+    Serial.println(PWM);   
+    Serial.print("pwm_load "); 
+    Serial.println(pwm_load);
   #endif
   ledcWrite(pwmChannel[number], pwm_load);
   return; 
@@ -933,8 +1004,12 @@ void INIT_ELOAD(){
     eload[i].device_conn_counter = 0;   // счетчик ошибок соединения с нагрузкой 
     for(int col=0; col<COUNT_PRESET; col++){eload[i].curr_col[col] = TFT_PURPLE;}                   // цвет тока не активного
     eload[i].curr_col[0] = TFT_GREEN;                                                               // цвет тока активного       
-    for(int val=0; val<COUNT_PRESET; val++){eload[i].curr_val_preset[val] = EE_VALUE.curr[i][val];} // значение тока 
-    for(int val=0; val<COUNT_PRESET; val++){eload[i].curr_decimal[val] = 3;}                        // количаство знаков после запятой     
+    for(int val=0; val<COUNT_PRESET; val++){
+      eload[i].curr_val_preset[val] = EE_VALUE.curr[i][val]; // значение тока 
+      if (eload[i].curr_val_preset[val] <  10 ){eload[i].curr_decimal[val] = 3;} // количаство знаков после запятой 
+      if (eload[i].curr_val_preset[val] >= 10 ){eload[i].curr_decimal[val] = 2;} // количаство знаков после запятой 
+      if (eload[i].curr_val_preset[val] >= 100){eload[i].curr_decimal[val] = 1;} // количаство знаков после запятой 
+    }         
   }
 
     
@@ -1057,13 +1132,14 @@ void setup() {
   INIT_DALLAS();
   INIT_ELOAD();
   INIT_LCD();
-  INIT_TIM_ENC();
+  INIT_TIM_ENC();  
 
   if(digitalRead(BTN_HALL) == 1){ // Нормальный запуск
     Init_Task3();    // Работа LCD
     Init_Task2();    // Обработка энкодера  
     Init_Task1();    // Обработка принятых данных от клавиатуры
     Init_Task4();    // Выключение отображения окна с шагом настройки
+    Init_Task8();    // Сохранение в EEPROM
   }
 
   if(digitalRead(BTN_HALL) == 0){ // Если нажат энкодер при старте запускаем калибровку
