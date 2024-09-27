@@ -3,7 +3,7 @@
 #include "Defines.h"
 #include "Base_table.h"
 
-#define ELNUMBER_MAX 5  // Количество подключенных нагрузок максимально
+#define ELNUMBER_MAX 4  // Количество подключенных нагрузок максимально
 #define ELNUMBER_MIN 1  // Количество подключенных нагрузок минимально
 #define COUNT_PRESET 6  // Количество пресетов тока в каждом канале    
 uint8_t ELNUMBER = 3;   // Количество подключенных нагрузок по умолчанию
@@ -412,7 +412,7 @@ void Task3code(void* pvParameters) {  // Работа LCD
   spr.setTextDatum(MC_DATUM);  
   
   /*------------Сетка-----------------------------*/
-  spr.fillSprite(TFT_BLACK); // Очистка экрана   
+  //spr.fillSprite(TFT_BLACK); // Очистка экрана   
   spr.drawFastHLine(0, 0,   DWIDTH, TFT_SILVER);    
   spr.drawFastHLine(0, 40,  DWIDTH, TFT_SILVER);  
   spr.drawFastHLine(0, 79,  DWIDTH, TFT_SILVER);  
@@ -915,20 +915,16 @@ void INIT_PWM_IO(){
   ledcAttachPin(PWM_Pin_3, pwmChannel_3);         // подключаем ШИМ-канал к пину  
   ledcSetup(pwmChannel_4, frequency, resolution); // задаём настройки ШИМ-канала:                                            
   ledcAttachPin(PWM_Pin_4, pwmChannel_4);         // подключаем ШИМ-канал к пину  
-  ledcSetup(pwmChannel_5, frequency, resolution); // задаём настройки ШИМ-канала:                                            
-  ledcAttachPin(PWM_Pin_5, pwmChannel_5);         // подключаем ШИМ-канал к пину
   
   ledcWrite(pwmChannel_1, 0);      // Начальное значение скважности ШИМ-канала
   ledcWrite(pwmChannel_2, 0);      // Начальное значение скважности ШИМ-канала
   ledcWrite(pwmChannel_3, 0);      // Начальное значение скважности ШИМ-канала
   ledcWrite(pwmChannel_4, 0);      // Начальное значение скважности ШИМ-канала
-  ledcWrite(pwmChannel_5, 0);      // Начальное значение скважности ШИМ-канала
 
   pinMode(DETECT_ELOAD_1, INPUT);
   pinMode(DETECT_ELOAD_2, INPUT);
   pinMode(DETECT_ELOAD_3, INPUT);
-  pinMode(DETECT_ELOAD_4, INPUT);
-  pinMode(DETECT_ELOAD_5, INPUT);
+  pinMode(DETECT_ELOAD_4, INPUT); 
   
   pinMode(BTN_HALL, INPUT);
   pinMode(ENCODER_A, INPUT);
